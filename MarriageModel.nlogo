@@ -5,6 +5,7 @@ globals [
   ; --- 新增统计指标 ---
   total-marriage-age    ; 历史所有结婚者的年龄总和
   total-married-people  ; 历史结婚总人数 ( = marriage-count * 2)
+  recent-marriage-ages  ; 列表：存最近 50 对新人的年龄
 ]
 
 breed [men man]
@@ -13,7 +14,8 @@ breed [women woman]
 turtles-own [
   age
   wealth
-  looks
+  looks           ; 当前外貌 (会变老)
+  base-looks  
   standard
   status          ; 0=single, 1=married
   partner
@@ -26,6 +28,7 @@ to setup
   set birth-count 0
   set total-marriage-age 0
   set total-married-people 0
+  set recent-marriage-ages []
   
   create-men (initial-people / 2) [ 
     setxy random-xcor random-ycor 
@@ -49,11 +52,12 @@ to init-person [gender]
   ; 正态分布财富
   set wealth random-normal 50 30
   if wealth < 0 [ set wealth 5 ]
+
+  set base-looks random-normal 50 15
+  if base-looks > 100 [ set base-looks 100 ]
+  if base-looks < 0 [ set base-looks 0 ]
   
-  ; 正态分布颜值
-  set looks random-normal 50 15
-  if looks > 100 [ set looks 100 ]
-  if looks < 0 [ set looks 0 ]
+  set looks base-looks  ; 把基因赋值给当前外貌
   
   ; 价值观偏好
   ifelse gender = "male" [
@@ -72,6 +76,7 @@ to init-person [gender]
 end
 
 to go
+  if ticks >= 1000 [ stop ]
   if count turtles = 0 [ stop ]
   
   ask turtles [
@@ -159,12 +164,22 @@ to get-married [mate]
     
     ; --- 统计结婚数据 ---
     set marriage-count marriage-count + 1
-    
-    ; 记录两人当前的年龄
-    set total-marriage-age total-marriage-age + age + [age] of mate
-    set total-married-people total-married-people + 2
+        ; --- 插入这里：实时打点 ---
+    ; 不需要放到 do-plotting 里，发生结婚时直接画
+    set-current-plot "Marriage Age Trend"
+    set-current-plot-pen "dots"
+    plotxy ticks age             ; 画我的年龄
+    plotxy ticks [age] of mate   ; 画对象的年龄
     
     create-link-with mate [ set color green ]
+    ; 把两人年龄加到列表前面
+    set recent-marriage-ages fput age recent-marriage-ages
+    set recent-marriage-ages fput [age] of mate recent-marriage-ages
+    
+    ; 保持列表长度不超过 100 (代表最近 50 对新人，假设每年5对，约等于10年)
+    if length recent-marriage-ages > 100 [
+      set recent-marriage-ages sublist recent-marriage-ages 0 100
+    ]
   ]
 end
 
@@ -185,8 +200,8 @@ to reproduce
       if family-wealth > child-cost [
         if random 100 < 5 [ 
           
-          let mother-looks looks
-          let father-looks [looks] of partner
+          let mother-looks base-looks
+          let father-looks [base-looks] of partner
           let mother-weight weight-wealth
           let father-weight [weight-wealth] of partner
 
@@ -247,7 +262,7 @@ to do-plotting
   ; 你的界面上必须有一个叫 "Looks Stats" 的图表
   set-current-plot "Looks Stats" 
   set-current-plot-pen "avg-looks"
-  plot mean [looks] of turtles
+  plot mean [base-looks] of turtles
   
   ; --- 图表3 ---
   ; 你的界面上必须有一个叫 "Wealth Stats" 的图表
@@ -313,7 +328,7 @@ child-cost
 child-cost
 0
 100
-35
+25
 1
 1
 NIL
@@ -343,7 +358,7 @@ social-pressure
 social-pressure
 0
 0.1
-0.04
+0.1
 0.01
 1
 NIL
@@ -405,9 +420,9 @@ NIL
 MONITOR
 735
 294
-817
+900
 343
-当前结婚率
+已婚人群的占比
 (count turtles with [status = 1] / (count turtles + 0.001)) * 100
 2
 1
@@ -461,10 +476,10 @@ PENS
 "avg-wealth" 1.0 0 -11085214 true "" ""
 
 PLOT
-1004
+999
 441
 1204
-591
+593
 Looks Stats
 NIL
 NIL
@@ -496,13 +511,31 @@ HORIZONTAL
 MONITOR
 734
 450
-830
+872
 499
-平均初婚年龄
-total-marriage-age / (total-married-people + 0.001)
+平均初婚年龄(50对)
+sum recent-marriage-ages / (length recent-marriage-ages + 0.00001)
 17
 1
 12
+
+PLOT
+657
+563
+857
+713
+Marriage Age Trend
+Time
+Age
+0.0
+10.0
+0.0
+100.0
+true
+false
+"" ""
+PENS
+"dots" 1.0 2 -817084 true "" ""
 
 @#$#@#$#@
 ## WHAT IS IT?
